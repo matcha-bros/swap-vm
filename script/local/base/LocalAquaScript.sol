@@ -50,6 +50,8 @@ abstract contract LocalAquaScript is Script, AquaOpcodes {
     uint256 internal constant DEFAULT_ADD_LIQUIDITY_A = 100e18;
     uint256 internal constant DEFAULT_ADD_LIQUIDITY_B = 100e18;
     uint256 internal constant DEFAULT_SWAP_AMOUNT_IN = 10e18;
+    uint256 internal constant DEFAULT_SEED_TOKEN_AMOUNT = 1_000e18;
+    uint256 internal constant DEFAULT_SEED_ETH_AMOUNT = 10 ether;
     bytes32 internal constant DEFAULT_POOL_SALT = bytes32(uint256(1));
 
     IAqua internal immutable aqua;
@@ -67,6 +69,18 @@ abstract contract LocalAquaScript is Script, AquaOpcodes {
 
     function _maker() internal returns (address) {
         return vm.envOr("OPS_MAKER_ADDRESS", _deployer());
+    }
+
+    function _seedWallet() internal returns (address) {
+        return vm.envOr("OPS_SEED_WALLET_ADDRESS", _deployer());
+    }
+
+    function _seedTokenAmount() internal view returns (uint256) {
+        return vm.envOr("OPS_SEED_TOKEN_AMOUNT", DEFAULT_SEED_TOKEN_AMOUNT);
+    }
+
+    function _seedEthAmount() internal view returns (uint256) {
+        return vm.envOr("OPS_SEED_ETH_AMOUNT", DEFAULT_SEED_ETH_AMOUNT);
     }
 
     function _tokenA() internal view returns (TokenMock) {
