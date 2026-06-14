@@ -17,6 +17,7 @@
     "elliptic": "6.6.1"
   },
   "scripts": {
+    "dev:geth": "scripts/dev-geth.sh",
     "test": "forge test",
     "build": "forge build",
     "lint": "forge fmt --check",

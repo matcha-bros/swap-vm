@@ -248,12 +248,14 @@ contract Fee {
         if (feeProvider != address(0)) {
             (bool success, bytes memory result) = feeProvider.staticcall(abi.encodeCall(
                 IAccountedFeeProvider.getAccountedFeeState,
-                (ctx.query.orderHash,
-                ctx.query.maker,
-                ctx.query.taker,
-                ctx.query.tokenIn,
-                ctx.query.tokenOut,
-                ctx.query.isExactIn)
+                (
+                    ctx.query.orderHash,
+                    ctx.query.maker,
+                    ctx.query.taker,
+                    ctx.query.tokenIn,
+                    ctx.query.tokenOut,
+                    ctx.query.isExactIn
+                )
             ));
 
             require(success && result.length == 128, FeeAccountedProviderFailedCall());

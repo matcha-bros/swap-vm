@@ -1,0 +1,28 @@
+services:
+  firehose-geth:
+    image: ghcr.io/streamingfast/go-ethereum:geth-v1.16.7-fh3.0
+    platform: linux/amd64
+    entrypoint: /app/fireeth
+    command:
+      - --config-file=
+      - start
+      - reader-node,relayer,merger,firehose,substreams-tier1,substreams-tier2
+      - --reader-node-path=geth
+      - --reader-node-arguments=--dev --dev.period=1 --vmtrace=firehose --http --http.addr=0.0.0.0 --http.port=8545 --http.api=eth,net,web3,debug,txpool --http.corsdomain=* --http.vhosts=* --rpc.allow-unprotected-txs --datadir=/data/geth
+      - --firehose-grpc-listen-addr=:8089
+      - --substreams-tier1-grpc-listen-addr=:9000
+      - --substreams-tier1-block-type=sf.ethereum.type.v2.Block
+      - --advertise-chain-name=local-geth
+      - --advertise-chain-aliases=local-geth,ethereum
+      - --advertise-block-id-encoding=hex
+      - --ignore-advertise-validation
+    ports:
+      - "8545:8545"
+      - "8546:8546"
+      - "8089:8089"
+      - "9000:9000"
+    volumes:
+      - firehose-geth-data:/data
+
+volumes:
+  firehose-geth-data:
