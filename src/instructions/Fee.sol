@@ -10,6 +10,8 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { IAqua } from "@1inch/aqua/src/interfaces/IAqua.sol";
 
 import { IProtocolFeeProvider } from "./interfaces/IProtocolFeeProvider.sol";
+import { IAccountedFeeProvider } from "./interfaces/IAccountedFeeProvider.sol";
+import { IAccountedFeeRecorder } from "./interfaces/IAccountedFeeRecorder.sol";
 
 import { Calldata } from "@1inch/solidity-utils/contracts/libraries/Calldata.sol";
 import { Context, ContextLib } from "../libs/VM.sol";
@@ -61,6 +63,7 @@ contract Fee {
     error FeeDynamicProtocolInvalidRecipient();
     error FeeBpsOutOfRange(uint256 feeBps);
     error FeeProtocolProviderFailedCall();
+    error FeeAccountedProviderFailedCall();
 
     IAqua internal immutable _AQUA;
 
@@ -223,6 +226,67 @@ contract Fee {
 
             if (!ctx.vm.isStaticContext && feeAmountIn > 0) {
                 _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, to);
+            }
+        }
+    }
+
+    /// @notice Accounted dynamic protocol fee with external fee provider and optional accounting callback (Aqua version)
+    /// @dev The fee provider is queried by staticcall. During quote, this instruction computes the fee
+    ///   but skips token pulls and accounting writes. During swap, non-zero recipients receive the fee
+    ///   through Aqua and non-zero record targets receive realized fee accounting.
+    /// @dev Unlike _aquaDynamicProtocolFeeAmountInXD, recipient == address(0) does not revert.
+    ///   It leaves the fee value in the maker strategy and only records accounting. This no-recipient
+    ///   reinvest path is experimental and should be researched before finalizing the opcode semantics.
+    /// @param args.feeProvider | 20 bytes (address of the accounted fee provider)
+    function _aquaAccountedDynamicFeeAmountInXD(Context memory ctx, bytes calldata args) internal {
+        address feeProvider = FeeArgsBuilder.parseDynamicProtocolFee(args);
+        uint256 feeBps;
+        address recipient;
+        address recordTarget;
+        bytes32 accountingKey;
+
+        if (feeProvider != address(0)) {
+            (bool success, bytes memory result) = feeProvider.staticcall(abi.encodeCall(
+                IAccountedFeeProvider.getAccountedFeeState,
+                (
+                    ctx.query.orderHash,
+                    ctx.query.maker,
+                    ctx.query.taker,
+                    ctx.query.tokenIn,
+                    ctx.query.tokenOut,
+                    ctx.query.isExactIn
+                )
+            ));
+
+            require(success && result.length == 128, FeeAccountedProviderFailedCall());
+            (feeBps, recipient, recordTarget, accountingKey) = abi.decode(result, (uint32, address, address, bytes32));
+            require(feeBps <= BPS, FeeBpsOutOfRange(feeBps));
+        }
+
+        uint256 feeAmountIn = _feeAmountIn(ctx, feeBps);
+
+        if (!ctx.vm.isStaticContext) {
+            // Note: this intentionally differs from _aquaDynamicProtocolFeeAmountInXD.
+            // A zero recipient means "do not pull the fee; leave it reinvested in the maker strategy".
+            // That account-only fallback needs more economic review before these semantics are final.
+            if (recipient != address(0) && feeAmountIn > 0) {
+                ctx.swap.amountNetPulled += feeAmountIn;
+                _AQUA.pull(ctx.query.maker, ctx.query.orderHash, ctx.query.tokenIn, feeAmountIn, recipient);
+            }
+
+            if (recordTarget != address(0)) {
+                IAccountedFeeRecorder(recordTarget).recordAccountedFee(
+                    accountingKey,
+                    ctx.query.orderHash,
+                    ctx.query.maker,
+                    ctx.query.taker,
+                    ctx.query.tokenIn,
+                    ctx.query.tokenOut,
+                    ctx.query.tokenIn,
+                    feeAmountIn,
+                    ctx.swap.amountIn,
+                    ctx.swap.amountOut
+                );
             }
         }
     }
